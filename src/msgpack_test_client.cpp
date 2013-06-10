@@ -80,7 +80,7 @@ int main(int argc, char *argv[])
         int32_t msglen;
         boost::system::error_code ec;
 
-        len = s.read_some(
+        len = s.read(
                 boost::asio::buffer(&msglen, sizeof(msglen)),
                 ec);
         if (ec == boost::asio::error::eof) {
@@ -91,7 +91,7 @@ int main(int argc, char *argv[])
 
         char *msg = new char[msglen];
 
-        len = s.read_some(
+        len = s.read(
                 boost::asio::buffer(msg, msglen),
                 ec);
         if (ec == boost::asio::error::eof) {
