@@ -80,8 +80,10 @@ int main(int argc, char *argv[])
         int32_t msglen;
         boost::system::error_code ec;
 
-        len = s.read(
+        len = boost::asio::read(
+                s,
                 boost::asio::buffer(&msglen, sizeof(msglen)),
+                boost::asio::transfer_all(),
                 ec);
         if (ec == boost::asio::error::eof) {
             return 0; // Coonection closed cleanly by peer.
@@ -91,8 +93,14 @@ int main(int argc, char *argv[])
 
         char *msg = new char[msglen];
 
-        len = s.read(
+        len = boost::asio::read(
+                s,
                 boost::asio::buffer(msg, msglen),
+#if ((BOOST_VERSION / 100 % 1000) >= 47)
+                boost::asio::transfer_exactly(msglen),
+#else
+                boost::asio::transfer_at_least(msglen),
+#endif
                 ec);
         if (ec == boost::asio::error::eof) {
             return 0; // Coonection closed cleanly by peer.

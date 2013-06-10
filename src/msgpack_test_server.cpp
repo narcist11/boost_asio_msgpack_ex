@@ -86,9 +86,14 @@ private:
         }
     }
 
-    void handle_write(const boost::system::error_code& /* error */,
-                      size_t /* bytes_transferred */)
-    {}
+    void handle_write(const boost::system::error_code& error,
+                      size_t bytes_transferred)
+    {
+        if (!error) {
+            std::cout << "transferred " << bytes_transferred <<
+                " byte(s).\n";
+        }
+    }
 
     void handle_msg_length(const boost::system::error_code& error,
             size_t bytes_transferred)
@@ -126,14 +131,15 @@ private:
             msgpack::sbuffer ebuf;
             msgpack::pack(ebuf, eval);
 
-            int32_t omsglen = sizeof(omsglen) + ebuf.size();
-            ensure_outgoing_buf_capa(omsglen);
+            int32_t omsglen = ebuf.size();
+            ensure_outgoing_buf_capa(sizeof(omsglen) + omsglen);
 
             memcpy(outgoing_buf_, &omsglen, sizeof(omsglen));
             memcpy(outgoing_buf_ + sizeof(omsglen), ebuf.data(), ebuf.size());
 
             boost::asio::async_write(socket_,
-                    boost::asio::buffer(outgoing_buf_, omsglen),
+                    boost::asio::buffer(outgoing_buf_,
+                        sizeof(omsglen) +omsglen),
                     boost::bind(&tcp_connection::handle_write,
                         shared_from_this(),
                         boost::asio::placeholders::error,
@@ -154,8 +160,8 @@ private:
         double gpa = sr.get_gpa();
 
         remark << "Dear, " <<
-            sr.get_name() << ". (id= " <<
-            sr.get_id() << ") (gpa= " <<
+            sr.get_name() << ". (id=" <<
+            sr.get_id() << ") (gpa=" <<
             sr.get_gpa() << "): ";
 
         if (gpa >= 4.0) {
