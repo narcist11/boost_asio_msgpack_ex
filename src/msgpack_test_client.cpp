@@ -18,6 +18,17 @@ void handle_write(const boost::system::error_code& /* error */,
 {
 }
 
+void dispatch_evaluation(msgpack::object const& obj)
+{
+    evaluation eval;
+    obj.convert(&eval);
+
+    std::cout << eval.get_remark() <<
+        ", result = " <<
+        (eval.get_passed() ? "Passed!" : "Failure!") <<
+        std::endl;
+}
+
 int main(int argc, char *argv[])
 {
     try {
@@ -57,13 +68,28 @@ int main(int argc, char *argv[])
         msgpack::sbuffer sbuf;
         msgpack::pack(sbuf, sr);
 
-        int32_t smsglen = sbuf.size();
-        char *smsg = new char [sizeof(smsglen) + smsglen];
-        memcpy(smsg, &smsglen, sizeof(smsglen));
-        memcpy(smsg + sizeof(smsglen), sbuf.data(), smsglen);
+        // 
+        // message frame
+        //
+        // +--------+------------+--------------+
+        // | length | message id | message body |
+        // +--------+------------+--------------+
+        //
+
+        int32_t smsg_id = STUDENT_RECORD;
+        int32_t smsglen = sizeof(smsg_id) + sbuf.size();
+        size_t slen = sizeof(smsglen) + smsglen;
+        char *smsg = new char [slen];
+        char *smsg_cusor = smsg;
+
+        memcpy(smsg_cusor, &smsglen, sizeof(smsglen));
+        smsg_cusor += sizeof(smsglen);
+        memcpy(smsg_cusor, &smsg_id, sizeof(smsg_id));
+        smsg_cusor += sizeof(smsg_id);
+        memcpy(smsg_cusor, sbuf.data(), smsglen);
 
         boost::asio::async_write(s,
-                boost::asio::buffer(smsg, (sizeof(smsglen) + smsglen)),
+                boost::asio::buffer(smsg, slen),
                 boost::bind(&handle_write,
                     boost::asio::placeholders::error,
                     boost::asio::placeholders::bytes_transferred)
@@ -108,18 +134,28 @@ int main(int argc, char *argv[])
             throw boost::system::system_error(ec);
         }
 
+        int32_t msg_id = 0;
+        size_t mlen = 0;
+        char *buf = msg;
+
+        memcpy(&msg_id, buf, sizeof(msg_id));
+        buf += sizeof(msg_id);
+        mlen = msglen - sizeof(msg_id);
+
         msgpack::unpacked unpacked_msg;
-        msgpack::unpack(&unpacked_msg, msg, msglen);
+        msgpack::unpack(&unpacked_msg, buf, mlen);
 
         msgpack::object obj = unpacked_msg.get();
 
-        evaluation eval;
-        obj.convert(&eval);
-
-        std::cout << eval.get_remark() <<
-            ", result = " <<
-            (eval.get_passed() ? "Passed!" : "Failure!") <<
-            std::endl;
+        // dispatch messages
+        switch (msg_id) {
+        case EVALUATION:
+            dispatch_evaluation(obj);
+            break;
+        default:
+            // invalid message id
+            break;
+        };
 
         delete [] msg;
 

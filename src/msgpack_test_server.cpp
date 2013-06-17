@@ -95,6 +95,45 @@ private:
         }
     }
 
+    void dispatch_student_record(msgpack::object const& obj)
+    {
+        student_record sr;
+        obj.convert(&sr);
+
+        evaluation eval = make_evaluation(sr);
+
+        msgpack::sbuffer ebuf;
+        msgpack::pack(ebuf, eval);
+
+        char *obuf_cusor = outgoing_buf_;
+        int32_t omsg_id = EVALUATION;
+        int32_t omsglen = sizeof(omsg_id) + ebuf.size();
+        size_t olen = sizeof(omsglen) + omsglen;
+        ensure_outgoing_buf_capa(olen);
+
+        memcpy(obuf_cusor, &omsglen, sizeof(omsglen));
+        obuf_cusor += sizeof(omsglen);
+        memcpy(obuf_cusor, &omsg_id, sizeof(omsg_id));
+        obuf_cusor += sizeof(omsg_id);
+        memcpy(obuf_cusor, ebuf.data(), ebuf.size());
+
+        boost::asio::async_write(socket_,
+                boost::asio::buffer(outgoing_buf_, olen),
+                boost::bind(&tcp_connection::handle_write,
+                    shared_from_this(),
+                    boost::asio::placeholders::error,
+                    boost::asio::placeholders::bytes_transferred)
+                );
+    }
+
+    //
+    // message frame
+    //
+    // +--------+------------+--------------+
+    // | length | message id | message body |
+    // +--------+------------+--------------+
+    //
+
     void handle_msg_length(const boost::system::error_code& error,
             size_t bytes_transferred)
     {
@@ -118,34 +157,34 @@ private:
             size_t bytes_transferred)
     {
         if (!error) {
+            bool invalid_msg_id = false;
+            int32_t msg_id = 0;
+            size_t len = 0;
+            char *buf = incoming_buf_;
+
+            memcpy(&msg_id, buf, sizeof(msg_id));
+            buf += sizeof(msg_id);
+            len = msglen_ - sizeof(msg_id);
+
             msgpack::unpacked unpacked_msg;
-            msgpack::unpack(&unpacked_msg, incoming_buf_, msglen_);
+            msgpack::unpack(&unpacked_msg, buf, len);
 
             msgpack::object obj = unpacked_msg.get();
 
-            student_record sr;
-            obj.convert(&sr);
+            // dispatch messages
+            switch (msg_id) {
+            case STUDENT_RECORD:
+                dispatch_student_record(obj);
+                break;
+            default:
+                invalid_msg_id = true;
+                std::cout << "invalid message id = " << msg_id << std::endl;
+                break;
+            };
 
-            evaluation eval = make_evaluation(sr);
-
-            msgpack::sbuffer ebuf;
-            msgpack::pack(ebuf, eval);
-
-            int32_t omsglen = ebuf.size();
-            ensure_outgoing_buf_capa(sizeof(omsglen) + omsglen);
-
-            memcpy(outgoing_buf_, &omsglen, sizeof(omsglen));
-            memcpy(outgoing_buf_ + sizeof(omsglen), ebuf.data(), ebuf.size());
-
-            boost::asio::async_write(socket_,
-                    boost::asio::buffer(outgoing_buf_,
-                        sizeof(omsglen) +omsglen),
-                    boost::bind(&tcp_connection::handle_write,
-                        shared_from_this(),
-                        boost::asio::placeholders::error,
-                        boost::asio::placeholders::bytes_transferred)
-                    );
-            start();
+            if (!invalid_msg_id) {
+                start(); // handle other messages..
+            }
         } else if (error == boost::asio::error::eof) {
             return; // Connection closed cleanly by peer.
         } else {

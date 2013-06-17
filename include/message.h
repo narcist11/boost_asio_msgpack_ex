@@ -4,6 +4,11 @@
 #include "msgpack.hpp"
 #include <string>
 
+enum message_id {
+    STUDENT_RECORD = 1,
+    EVALUATION
+};
+
 class student_record {
 private:
     std::string name_;
