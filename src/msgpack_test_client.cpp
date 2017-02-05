@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
         smsg_cusor += sizeof(smsg_id);
         memcpy(smsg_cusor, sbuf.data(), smsglen);
 
-        boost::asio::async_write(s,
+        boost::asio::write(s,
                 boost::asio::buffer(smsg, slen),
                 boost::bind(&handle_write,
                     boost::asio::placeholders::error,
